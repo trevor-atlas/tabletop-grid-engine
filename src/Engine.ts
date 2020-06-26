@@ -19,9 +19,8 @@ export class Engine {
 	) {
 		this.drawing = false;
 		this.ctx = canvas.getContext('2d');
-		const size = this.getCellSize();
-		this.width = columns * size + 2;
-		this.height = rows * size + 2;
+		this.width = window.innerWidth;
+		this.height = window.innerHeight;
 		this.canvas.width = this.width;
 		this.canvas.height = this.height;
 
@@ -34,13 +33,11 @@ export class Engine {
 				const { left, top } = this.canvas.getBoundingClientRect();
 				const { xOffset, yOffset } = this.getScaledOffsets();
 				const { clientX, clientY } = event;
-				const mx = clientX - left - xOffset;
-				const my = clientY - top - yOffset;
-				const vwidth = this.width * this.zoom;
-				const vheight = this.height * this.zoom;
-				// do nothing if we are clicking outside a visible part of the scalved grid
-				if (mx < 0 || mx > vwidth) return;
-				if (my < 0 || my > vheight) return;
+				const mx = (clientX - left - xOffset) * this.zoom;
+				const my = (clientY - top - yOffset) * this.zoom;
+				// do nothing if we are clicking outside a visible part of the scaled grid
+				if (mx < 0 || mx > this.vwidth) return;
+				if (my < 0 || my > this.vheight) return;
 				const { row, col } = this.getSquare(event);
 				if (this.grid[row][col].color !== 'gray') {
 					this.grid[row][col].color = 'gray';
@@ -56,9 +53,17 @@ export class Engine {
 		this.genGrid(rows, columns);
 	}
 
-	public getCellSize = () => {
+	public get vwidth() {
+		return this.columns * this.cellSize * this.zoom;
+	}
+
+	public get vheight() {
+		return this.rows * this.cellSize * this.zoom;
+	}
+
+	public get cellSize() {
 		return Math.floor(50 * this.zoom);
-	};
+	}
 
 	public ping = (row, col) => {
 		if (this.grid[row][col].color === 'gray') {
@@ -72,18 +77,16 @@ export class Engine {
 	public getSquare = ({ clientX, clientY }: MouseEvent) => {
 		const { left, top } = this.canvas.getBoundingClientRect();
 		const { xOffset, yOffset } = this.getScaledOffsets();
-		const mx = clientX - left - xOffset;
-		const my = clientY - top - yOffset;
-		const vwidth = this.width * this.zoom;
-		const vheight = this.height * this.zoom;
+		const mx = (clientX - left - xOffset) * this.zoom;
+		const my = (clientY - top - yOffset) * this.zoom;
 
 		const row = this.clamp(
-			((mx / vwidth) * this.rows) >> 0,
+			((mx / this.vwidth) * this.rows) >> 0,
 			0,
 			this.rows - 1
 		);
 		const col = this.clamp(
-			((my / vheight) * this.columns) >> 0,
+			((my / this.vheight) * this.columns) >> 0,
 			0,
 			this.columns - 1
 		);
@@ -111,17 +114,16 @@ export class Engine {
 	};
 
 	public drawGrid = () => {
-		const cellsize = this.getCellSize();
 		for (let row = 0; row < this.rows; row++) {
 			for (let col = 0; col < this.columns; col++) {
 				const color = this.grid[row][col].color;
 				if (row === 0 && col === 0) {
-					this.drawCell(row, col, cellsize, color);
+					this.drawCell(row, col, this.cellSize, color);
 				} else {
 					this.drawCell(
-						row * cellsize,
-						col * cellsize,
-						cellsize,
+						row * this.cellSize,
+						col * this.cellSize,
+						this.cellSize,
 						color
 					);
 				}
@@ -130,8 +132,10 @@ export class Engine {
 	};
 
 	private getScaledOffsets = () => {
-		const xOffset = ((this.width - this.width * this.zoom) / 2) >> 0;
-		const yOffset = ((this.height - this.height * this.zoom) / 2) >> 0;
+		const xOffset =
+			(this.width / 2 - (this.columns * this.cellSize) / 2) >> 0;
+		const yOffset =
+			(this.height / 2 - (this.rows * this.cellSize) / 2) >> 0;
 		return { xOffset, yOffset };
 	};
 
