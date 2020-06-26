@@ -6,7 +6,7 @@ export default function Home() {
 	let engine;
 	useEffect(() => {
 		const canvas = document.querySelector('#main');
-		engine = new Engine(canvas as HTMLCanvasElement, 20, 20);
+		engine = new Engine(canvas as HTMLCanvasElement, 20, 10);
 	});
 	return (
 		<div className="container">
@@ -16,7 +16,7 @@ export default function Home() {
 			</Head>
 
 			<main>
-				<button onClick={() => engine.genGrid(20, 20)}>reset</button>
+				<button onClick={() => engine.genGrid(10, 20)}>reset</button>
 				<canvas id="main"></canvas>
 			</main>
 

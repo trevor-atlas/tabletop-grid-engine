@@ -14,6 +14,7 @@ export class Engine {
 	private scrollX: number = 0;
 	private scrollY: number = 0;
 	private mouseBeginOrigin: { x: number; y: number };
+	private activeMouseButton: number;
 
 	constructor(
 		private canvas: HTMLCanvasElement,
@@ -35,40 +36,60 @@ export class Engine {
 			}
 		});
 
-		canvas.onmousedown = ({ clientX, clientY }) => {
+		canvas.onmousedown = ({ button, clientX, clientY }) => {
 			this.drawing = true;
 			const { left, top } = this.canvas.getBoundingClientRect();
 			const { xOffset, yOffset } = this.getScaledOffsets();
 			const mx = (clientX - left - xOffset) * this.zoom;
 			const my = (clientY - top - yOffset) * this.zoom;
 			this.mouseBeginOrigin = { x: mx, y: my };
+			this.activeMouseButton = button;
+			switch (this.activeMouseButton) {
+				case 2:
+					this.canvas.style = 'cursor: grabbing';
+			}
 		};
-		canvas.onmousemove = (event: MouseEvent) => {
-			event.stopPropagation();
-			const { clientX, clientY } = event;
+
+		canvas.addEventListener('click', ({ clientX, clientY }) => {
 			const { left, top } = this.canvas.getBoundingClientRect();
 			const { xOffset, yOffset } = this.getScaledOffsets();
-			const mx = (clientX - left - xOffset) * this.zoom;
-			const my = (clientY - top - yOffset) * this.zoom;
-
+			const mx = ((clientX - left - xOffset) * this.zoom) >> 0;
+			const my = ((clientY - top - yOffset) * this.zoom) >> 0;
 			// Do nothing if we are clicking outside a visible part of the virtual grid
-			switch (event.buttons) {
+			if (mx < 0 || mx > this.vwidth || my < 0 || my > this.vheight) {
+				return;
+			}
+			const { row, col } = this.getSquare(clientX, clientY);
+			if (this.grid[row][col].color !== 'gray') {
+				this.grid[row][col].color = 'gray';
+				this.drawGrid();
+			}
+		});
+
+		canvas.onmousemove = ({ clientX, clientY, button }: MouseEvent) => {
+			event.stopPropagation();
+			const { left, top } = this.canvas.getBoundingClientRect();
+			const { xOffset, yOffset } = this.getScaledOffsets();
+			const mx = ((clientX - left - xOffset) * this.zoom) >> 0;
+			const my = ((clientY - top - yOffset) * this.zoom) >> 0;
+			switch (this.activeMouseButton) {
 				case 2:
-					const x = -(this.mouseBeginOrigin.x - mx) >> 0;
-					const y = -(this.mouseBeginOrigin.y - my) >> 0;
+					const x = -(this.mouseBeginOrigin.x - mx);
+					const y = -(this.mouseBeginOrigin.y - my);
 					this.scrollX = this.clamp(
-						this.scrollX + x,
-						-this.vwidth,
-						this.vwidth
+						(this.scrollX + x) >> 0,
+						-this.width,
+						this.width
 					);
 					this.scrollY = this.clamp(
 						this.scrollY + y,
-						-this.vheight,
-						this.vheight
+						-this.height,
+						this.height
 					);
 					this.drawGrid();
 					break;
-				default:
+				case 0:
+					// Do nothing if we are clicking outside a visible part of the virtual grid
 					if (
 						mx < 0 ||
 						mx > this.vwidth ||
@@ -78,7 +99,7 @@ export class Engine {
 						return;
 					}
 					if (this.drawing) {
-						const { row, col } = this.getSquare(event);
+						const { row, col } = this.getSquare(clientX, clientY);
 						if (this.grid[row][col].color !== 'gray') {
 							this.grid[row][col].color = 'gray';
 							this.drawGrid();
@@ -90,6 +111,8 @@ export class Engine {
 		canvas.onmouseup = () => {
 			this.drawing = false;
 			this.mouseBeginOrigin = null;
+			this.canvas.style = '';
+			this.activeMouseButton = null;
 		};
 		canvas.onwheel = this.zoomIn;
 
@@ -97,15 +120,15 @@ export class Engine {
 	}
 
 	public get vwidth() {
-		return this.columns * this.cellSize * this.zoom;
+		return (this.columns * this.cellSize * this.zoom) >> 0;
 	}
 
 	public get vheight() {
-		return this.rows * this.cellSize * this.zoom;
+		return (this.rows * this.cellSize * this.zoom) >> 0;
 	}
 
 	public get cellSize() {
-		return Math.floor(50 * this.zoom);
+		return Math.floor(200 * this.zoom);
 	}
 
 	public ping = (row, col) => {
@@ -117,19 +140,19 @@ export class Engine {
 		this.drawGrid();
 	};
 
-	public getSquare = ({ clientX, clientY }: MouseEvent) => {
+	public getSquare = (x: number, y: number) => {
 		const { left, top } = this.canvas.getBoundingClientRect();
 		const { xOffset, yOffset } = this.getScaledOffsets();
-		const mx = (clientX - left - xOffset) * this.zoom;
-		const my = (clientY - top - yOffset) * this.zoom;
+		const mx = (x - left - xOffset) * this.zoom;
+		const my = (y - top - yOffset) * this.zoom;
 
 		const row = this.clamp(
-			((mx / this.vwidth) * this.rows) >> 0,
+			((my / this.vheight) * this.rows) >> 0,
 			0,
 			this.rows - 1
 		);
 		const col = this.clamp(
-			((my / this.vheight) * this.columns) >> 0,
+			((mx / this.vwidth) * this.columns) >> 0,
 			0,
 			this.columns - 1
 		);
@@ -166,8 +189,8 @@ export class Engine {
 						this.drawCell(row, col, this.cellSize, color);
 					} else {
 						this.drawCell(
-							(row * this.cellSize) >> 0,
 							(col * this.cellSize) >> 0,
+							(row * this.cellSize) >> 0,
 							this.cellSize,
 							color
 						);
@@ -202,6 +225,7 @@ export class Engine {
 				grid[row][col] = { color: 'lightgreen', entity: null };
 			}
 		}
+		console.log(grid);
 		this.grid = grid;
 		this.drawGrid();
 	};
@@ -218,9 +242,7 @@ export class Engine {
 			// zoom out
 			result -= 0.02;
 		}
-		this.zoom = this.clamp(result, 0.3, 2);
-		this.scrollX -= this.zoom;
-		this.scrollY -= this.zoom;
+		this.zoom = this.clamp(result, 0.05, 1);
 		this.drawGrid();
 	};
 
