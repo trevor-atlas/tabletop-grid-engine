@@ -1,13 +1,16 @@
 import Head from 'next/head';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Engine } from '../src/Engine';
 
+let engine;
 export default function Home() {
-	let engine;
+	const [width, setWidth] = useState(20);
+	const [height, setHeight] = useState(20);
+
 	useEffect(() => {
-		const canvas = document.querySelector('#main');
-		engine = new Engine(canvas as HTMLCanvasElement, 20, 10);
-	});
+		engine = new Engine(height, width);
+	}, []);
+
 	return (
 		<div className="container">
 			<Head>
@@ -16,9 +19,28 @@ export default function Home() {
 			</Head>
 
 			<main>
-				<button onClick={() => engine.genGrid(10, 20)}>reset</button>
-				<canvas id="main"></canvas>
+				<button onClick={() => engine.genGrid(height, width)}>
+					reset
+				</button>
+				<input
+					type="range"
+					min={0}
+					max={100}
+					step={1}
+					value={width}
+					onChange={({ target: { value } }) => setWidth(+value)}
+				/>
+				<input
+					type="range"
+					min={0}
+					max={100}
+					step={1}
+					value={height}
+					onChange={({ target: { value } }) => setHeight(+value)}
+				/>
 			</main>
+
+			<div id="renderingContext"></div>
 
 			<footer></footer>
 
@@ -30,6 +52,10 @@ export default function Home() {
 					flex-direction: column;
 					justify-content: center;
 					align-items: center;
+				}
+				#renderingContext {
+					width: 100vh;
+					height: 100vh;
 				}
 			`}</style>
 

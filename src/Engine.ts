@@ -4,6 +4,7 @@ interface Cell {
 }
 
 export class Engine {
+	private renderingContext: HTMLElement;
 	private ctx: CanvasRenderingContext2D;
 	private width: number;
 	private height: number;
@@ -15,20 +16,26 @@ export class Engine {
 	private scrollY: number = 0;
 	private mouseBeginOrigin: { x: number; y: number };
 	private activeMouseButton: number;
+	private canvas: HTMLCanvasElement;
 
-	constructor(
-		private canvas: HTMLCanvasElement,
-		private rows: number,
-		private columns: number
-	) {
+	private rows: number;
+	private columns: number;
+
+	constructor(rows: number, columns: number) {
+		this.canvas = document.createElement('canvas');
+		this.renderingContext = document.querySelector('#renderingContext');
+		this.renderingContext.appendChild(this.canvas);
+		this.ctx = this.canvas.getContext('2d');
+
 		this.drawing = false;
-		this.ctx = canvas.getContext('2d');
 		this.width = window.innerWidth;
 		this.height = window.innerHeight;
 		this.canvas.width = this.width;
 		this.canvas.height = this.height;
 
-		canvas.addEventListener('contextmenu', (e) => {
+		this.genGrid(rows, columns);
+
+		this.canvas.addEventListener('contextmenu', (e) => {
 			if (e.button == 2) {
 				// Block right-click menu thru preventing default action.
 				e.preventDefault();
@@ -36,12 +43,12 @@ export class Engine {
 			}
 		});
 
-		canvas.onmousedown = ({ button, clientX, clientY }) => {
+		this.canvas.onmousedown = ({ button, clientX, clientY }) => {
 			this.drawing = true;
 			const { left, top } = this.canvas.getBoundingClientRect();
 			const { xOffset, yOffset } = this.getScaledOffsets();
-			const mx = (clientX - left - xOffset) * this.zoom;
-			const my = (clientY - top - yOffset) * this.zoom;
+			const mx = clientX - left - xOffset;
+			const my = clientY - top - yOffset;
 			this.mouseBeginOrigin = { x: mx, y: my };
 			this.activeMouseButton = button;
 			switch (this.activeMouseButton) {
@@ -50,11 +57,11 @@ export class Engine {
 			}
 		};
 
-		canvas.addEventListener('click', ({ clientX, clientY }) => {
+		this.canvas.addEventListener('click', ({ clientX, clientY }) => {
 			const { left, top } = this.canvas.getBoundingClientRect();
 			const { xOffset, yOffset } = this.getScaledOffsets();
-			const mx = ((clientX - left - xOffset) * this.zoom) >> 0;
-			const my = ((clientY - top - yOffset) * this.zoom) >> 0;
+			const mx = (clientX - left - xOffset) >> 0;
+			const my = (clientY - top - yOffset) >> 0;
 			// Do nothing if we are clicking outside a visible part of the virtual grid
 			if (mx < 0 || mx > this.vwidth || my < 0 || my > this.vheight) {
 				return;
@@ -66,25 +73,29 @@ export class Engine {
 			}
 		});
 
-		canvas.onmousemove = ({ clientX, clientY, button }: MouseEvent) => {
+		this.canvas.onmousemove = ({
+			clientX,
+			clientY,
+			button,
+		}: MouseEvent) => {
 			event.stopPropagation();
 			const { left, top } = this.canvas.getBoundingClientRect();
 			const { xOffset, yOffset } = this.getScaledOffsets();
-			const mx = ((clientX - left - xOffset) * this.zoom) >> 0;
-			const my = ((clientY - top - yOffset) * this.zoom) >> 0;
+			const mx = (clientX - left - xOffset) >> 0;
+			const my = (clientY - top - yOffset) >> 0;
 			switch (this.activeMouseButton) {
 				case 2:
 					const x = -(this.mouseBeginOrigin.x - mx);
 					const y = -(this.mouseBeginOrigin.y - my);
 					this.scrollX = this.clamp(
-						(this.scrollX + x) >> 0,
-						-this.width,
-						this.width
+						(this.scrollX + Math.min(x, this.cellSize)) >> 0,
+						Math.min(-this.width * 2, -this.vwidth * 2),
+						Math.max(this.width * 2, this.vwidth * 2)
 					);
 					this.scrollY = this.clamp(
-						this.scrollY + y,
-						-this.height,
-						this.height
+						this.scrollY + Math.min(y, this.cellSize),
+						Math.min(-this.height * 2, -this.vheight * 2),
+						Math.max(this.height * 2, this.vheight * 2)
 					);
 					this.drawGrid();
 					break;
@@ -108,27 +119,25 @@ export class Engine {
 					break;
 			}
 		};
-		canvas.onmouseup = () => {
+		this.canvas.onmouseup = () => {
 			this.drawing = false;
 			this.mouseBeginOrigin = null;
 			this.canvas.style = '';
 			this.activeMouseButton = null;
 		};
-		canvas.onwheel = this.zoomIn;
-
-		this.genGrid(rows, columns);
+		this.renderingContext.onwheel = this.zoomIn;
 	}
 
 	public get vwidth() {
-		return (this.columns * this.cellSize * this.zoom) >> 0;
+		return (this.columns * this.cellSize) >> 0;
 	}
 
 	public get vheight() {
-		return (this.rows * this.cellSize * this.zoom) >> 0;
+		return (this.rows * this.cellSize) >> 0;
 	}
 
 	public get cellSize() {
-		return Math.floor(200 * this.zoom);
+		return 200;
 	}
 
 	public ping = (row, col) => {
@@ -143,8 +152,8 @@ export class Engine {
 	public getSquare = (x: number, y: number) => {
 		const { left, top } = this.canvas.getBoundingClientRect();
 		const { xOffset, yOffset } = this.getScaledOffsets();
-		const mx = (x - left - xOffset) * this.zoom;
-		const my = (y - top - yOffset) * this.zoom;
+		const mx = x - left - xOffset;
+		const my = y - top - yOffset;
 
 		const row = this.clamp(
 			((my / this.vheight) * this.rows) >> 0,
@@ -172,18 +181,25 @@ export class Engine {
 	private drawCell = (x: number, y: number, size: number, color: string) => {
 		const { xOffset, yOffset } = this.getScaledOffsets();
 		this.ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
-		this.ctx.lineWidth = 2;
+		this.ctx.lineWidth = 4;
 		this.ctx.lineJoin = 'round';
 		this.ctx.fillStyle = color;
+		if (
+			x + xOffset + this.cellSize < 0 ||
+			x + xOffset - this.cellSize > this.width ||
+			y + yOffset + this.cellSize < 0 ||
+			y + yOffset - this.cellSize > this.height
+		)
+			return;
 		this.ctx.strokeRect(x + xOffset, y + yOffset, size, size);
 		this.ctx.fillRect(x + xOffset, y + yOffset, size, size);
 	};
 
 	public drawGrid = () => {
-		requestAnimationFrame(() => {
-			this.ctx.clearRect(0, 0, this.width, this.height);
-			for (let row = 0; row < this.rows; row++) {
-				for (let col = 0; col < this.columns; col++) {
+		this.ctx.clearRect(0, 0, this.width, this.height);
+		for (let row = 0; row < this.rows; row++) {
+			for (let col = 0; col < this.columns; col++) {
+				requestAnimationFrame(() => {
 					const { color } = this.grid[row][col];
 					if (row === 0 && col === 0) {
 						this.drawCell(row, col, this.cellSize, color);
@@ -195,9 +211,9 @@ export class Engine {
 							color
 						);
 					}
-				}
+				});
 			}
-		});
+		}
 	};
 
 	private getScaledOffsets = () => {
@@ -216,17 +232,20 @@ export class Engine {
 	};
 
 	private genGrid = (rows: number, columns: number) => {
-		const grid = Array(rows)
-			.fill(null)
-			.map(() => Array(columns).fill(null));
+		this.rows = this.clamp(rows, 3, 50);
+		this.columns = this.clamp(columns, 3, 50);
 
-		for (let row = 0; row < rows; row++) {
-			for (let col = 0; col < columns; col++) {
-				grid[row][col] = { color: 'lightgreen', entity: null };
+		console.log({ rows: this.rows, columns: this.columns });
+		this.grid = Array(this.rows)
+			.fill(null)
+			.map(() => Array(this.columns).fill(null));
+		console.log(this.grid);
+
+		for (let row = 0; row < this.rows; row++) {
+			for (let col = 0; col < this.columns; col++) {
+				this.grid[row][col] = { color: 'lightgreen', entity: null };
 			}
 		}
-		console.log(grid);
-		this.grid = grid;
 		this.drawGrid();
 	};
 
@@ -243,7 +262,7 @@ export class Engine {
 			result -= 0.02;
 		}
 		this.zoom = this.clamp(result, 0.05, 1);
-		this.drawGrid();
+		this.renderingContext.style = `transform: scale(${this.zoom})`;
 	};
 
 	private clamp = (n: number, min: number, max: number) => {
